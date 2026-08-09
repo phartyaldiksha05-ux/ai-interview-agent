@@ -1,7 +1,7 @@
 @import url("https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap");
 
 :root {
-  /* AB Talks-matched palette: near-black base, violet accent, LED-green for live/timer elements */
+  
   --bg: #0B0B0F;
   --surface: #17171E;
   --surface-2: #1F1F29;
