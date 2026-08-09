@@ -1,5 +1,4 @@
-// Groq offers a genuinely free tier (no credit card, ~14,400 requests/day)
-// via an OpenAI-compatible Chat Completions endpoint — no extra SDK needed.
+
 const GROQ_BASE_URL = process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1";
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
