@@ -1,4 +1,5 @@
-
+// Groq offers a genuinely free tier (no credit card, ~14,400 requests/day)
+// via an OpenAI-compatible Chat Completions endpoint — no extra SDK needed.
 const GROQ_BASE_URL = process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1";
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
@@ -39,6 +40,8 @@ export async function getInterviewerDecision(
       body: JSON.stringify({
         model: MODEL,
         temperature: 0.7,
+        max_tokens: 2048, // feedback payloads (summary + 3 arrays) are the largest responses —
+        // too low a limit truncates the JSON and breaks parsing, especially near interview end.
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: systemPrompt },
@@ -56,19 +59,28 @@ export async function getInterviewerDecision(
 
   const parse = (raw: string): LLMTurnDecision => {
     const cleaned = raw.replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(cleaned);
+    let parsed: any;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch (err) {
+      console.error("Failed to parse LLM JSON. Raw response:", raw);
+      throw err;
+    }
     if (!parsed.action || !parsed.reply) {
+      console.error("LLM response missing required fields. Raw response:", raw);
       throw new Error("Missing required fields in LLM response");
     }
     return parsed as LLMTurnDecision;
   };
 
-  try {
-    const raw = await call();
-    return parse(raw);
-  } catch (err) {
-    // One retry — LLMs occasionally wrap JSON in prose despite instructions.
-    const raw = await call();
-    return parse(raw);
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const raw = await call();
+      return parse(raw);
+    } catch (err) {
+      lastErr = err;
+    }
   }
+  throw lastErr;
 }
