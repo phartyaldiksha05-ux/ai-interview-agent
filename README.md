@@ -1,92 +1,76 @@
 # AI Interview Agent — ABTalks AI Cohort
 
-An adaptive, multi-turn technical interview agent built for the **AB Talks
-Vibe-Code Hackathon** — problem statement: *The Interview Agent*.
+An adaptive, multi-turn technical interview agent built for the **AB Talks Vibe-Code Hackathon** — problem statement: *The Interview Agent*.
 
-The agent conducts a realistic technical interview personalized to each
-candidate's actual progress through the 31-day ABTalks AI Cohort — probing
-skipped topics, failed attempts, and low-confidence passes, while confirming
-genuine strengths — and produces structured feedback at the end.
+The application conducts personalized technical interviews based on a candidate's curriculum progress, resume, previous responses, and interview context. It dynamically selects topics, asks follow-up questions, evaluates responses, and produces structured feedback at the end.
 
-## How it works
+## Features
 
-- `POST /api/interview` is the single endpoint required by the technical
-  spec. The first call (with a new `sessionId` + `candidate` object) starts
-  the interview; every following call (with `sessionId` + `message`) is a
-  conversation turn.
-- Each turn, the candidate's curriculum history (from `candidate.missions`)
-  is matched against `data/curriculum.json`, prioritized by struggle signals
-  (skipped / failed / many attempts), and fed to an LLM (Groq, free tier)
-  along with the full conversation so far. The model decides whether to ask
-  a follow-up, move to a new topic, or end the interview — and returns
-  strict JSON per the spec.
-- A minimum of 8 questions across 4+ distinct curriculum days is enforced in
-  code as a guardrail, not just prompted — the interview won't end early
-  even if the model tries to.
-- Session state (conversation history, question/day coverage) is persisted
-  via the **Breeth AI Memory Layer** when `BREETH_API_KEY` is set, so state
-  survives across serverless invocations. Falls back to in-memory storage
-  automatically if Breeth isn't configured (e.g. local dev).
+- **Adaptive technical interviews** based on candidate progress
+- **Resume upload** for personalized interview context
+- **Multi-turn conversation** with adaptive follow-up questions
+- **Curriculum-aware questioning** across the ABTalks AI Cohort
+- Prioritization of skipped topics, failed attempts, and weaker areas
+- **Voice interaction** with microphone input and spoken responses
+- Structured final interview feedback
+- Persistent interview sessions for serverless deployment
+- Responsive web interface
+- Local terminal simulation for end-to-end testing
 
-## Local setup
+## How It Works
 
-```bash
-npm install
-cp .env.example .env.local
-# add your GROQ_API_KEY (free — get one at console.groq.com/keys) to .env.local
-# and optionally BREETH_API_KEY
-npm run dev
-```
+The interview starts when a new `sessionId` and candidate profile are provided.
 
-Open http://localhost:3000 to try the interview in the browser with any
-sample candidate from `data/sample-candidates.json`.
+For each subsequent turn, the application:
 
-## Simulating a full interview from the terminal
+1. Loads the candidate's curriculum history.
+2. Matches the candidate's progress against `data/curriculum.json`.
+3. Identifies topics that need more attention.
+4. Incorporates resume information when available.
+5. Sends the relevant interview context and conversation history to the LLM.
+6. Generates the next interview question or follow-up.
+7. Stores the updated interview session.
+8. Continues until the interview requirements are satisfied.
+9. Produces structured feedback when the interview ends.
 
-Useful for testing the flow end-to-end or recording the demo video:
+A minimum of 8 questions across 4+ distinct curriculum days is enforced in code as a guardrail so the interview does not end prematurely.
 
-```bash
-npm run dev            # in one terminal
-npm run test:sim       # in another — pass a candidate id, e.g.:
-node scripts/simulate-interview.mjs CAND-016
-```
+## Resume-Based Interview
 
-This uses a second Groq call to role-play the candidate's answers, so you
-can watch a complete interview + feedback run without typing anything.
+Candidates can upload their resume through the web interface.
 
-## API contract
+The resume is processed by the application and used to create additional interview context. This allows the agent to ask questions that are more relevant to the candidate's background, skills, and experience.
 
-Matches `technical-spec.md` exactly:
+## Voice Interaction
 
-```
-POST /api/interview
-{ "sessionId": "abc-123", "candidate": { ...candidate.json } }
-→ { "reply": "...", "done": false }
+The application supports voice-based interaction:
 
-POST /api/interview
-{ "sessionId": "abc-123", "message": "..." }
-→ { "reply": "...", "done": false }
-  ... repeats ...
-→ {
-    "reply": "Interview completed.",
-    "done": true,
-    "feedback": { "summary": "...", "strengths": [], "gaps": [], "next": [] }
-  }
-```
+- Microphone input for candidate responses
+- Spoken AI interview questions
+- Text-based interaction remains available as a fallback
 
-## Deploying
+This provides a more realistic interview experience compared with a text-only chatbot.
 
-1. Push this repo to GitHub (public).
-2. Import into Vercel.
-3. Add `GROQ_API_KEY` (required, free) and `BREETH_API_KEY` / `BREETH_BASE_URL`
-   (optional, for persistent memory) as environment variables in the Vercel
-   project settings.
-4. Deploy — the live `/api/interview` endpoint is what the evaluator calls.
+## Session Persistence
 
-## Demo video
+Interview sessions are stored using persistent Redis storage for production/serverless environments.
 
-_(Add your unlisted YouTube link here once recorded.)_
+The application uses **Upstash Redis** when the required environment variables are configured.
 
-## AI usage log
+For local development, an in-memory fallback is available.
 
-See [`PROMPTS.md`](./PROMPTS.md) for the prompt log.
+Session data includes information such as:
+
+- Conversation history
+- Interview progress
+- Question/day coverage
+- Current session state
+
+## LLM
+
+The application uses **Groq** for LLM inference.
+
+The current model is configurable through the environment:
+
+```env
+GROQ_MODEL=llama-3.1-8b-instant
