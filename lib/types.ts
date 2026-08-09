@@ -1,4 +1,4 @@
-// ---- Candidate profile (matches candidates.json schema) ----
+
 
 export interface CandidateMission {
   day: number;
