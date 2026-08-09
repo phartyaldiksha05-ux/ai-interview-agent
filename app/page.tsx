@@ -5,7 +5,7 @@ import sampleCandidates from "@/data/sample-candidates.json";
 import type { Candidate } from "@/lib/types";
 import { buildInterviewContext } from "@/lib/curriculum";
 
-type Msg = { role: "interviewer" | "candidate"; text: ; day?: number };
+type Msg = { role: "interviewer" | "candidate"; text:string ; day?: number };
 type Phase = "setup" | "interview" | "done";
 type VoiceState = "idle" | "listening" | "speaking";
 
