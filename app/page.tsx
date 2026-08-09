@@ -35,6 +35,7 @@ export default function Page() {
 
   const recognitionRef = useRef<any>(null);
   const wantListeningRef = useRef(false);
+  const recognitionActiveRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
 
@@ -80,18 +81,23 @@ export default function Page() {
       rec.continuous = true; // keep listening through short pauses
       rec.interimResults = true;
       rec.lang = "en-US";
+      rec.onstart = () => {
+        recognitionActiveRef.current = true;
+      };
       rec.onresult = (e: any) => {
         let text = "";
         for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
         setInput(text);
       };
       rec.onend = () => {
+        recognitionActiveRef.current = false;
         // Some browsers still auto-stop after a silence timeout even in
         // continuous mode. If the user hasn't clicked "stop" themselves,
         // silently restart so it keeps listening through the pause.
         if (wantListeningRef.current) {
           try {
             rec.start();
+            recognitionActiveRef.current = true;
             return;
           } catch {
             // already running or briefly unrestartable — fall through
@@ -102,6 +108,7 @@ export default function Page() {
       rec.onerror = (e: any) => {
         if (e.error === "no-speech" || e.error === "aborted") return; // ignore, onend will restart
         wantListeningRef.current = false;
+        recognitionActiveRef.current = false;
         setVoiceState("idle");
       };
       recognitionRef.current = rec;
@@ -162,16 +169,26 @@ export default function Page() {
 
   function toggleMic() {
     if (!recognitionRef.current) return;
-    if (voiceState === "listening") {
+    if (recognitionActiveRef.current) {
       wantListeningRef.current = false;
-      recognitionRef.current.stop();
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        // already stopped — nothing to do
+      }
       setVoiceState("idle");
     } else {
       window.speechSynthesis?.cancel();
       setInput("");
       wantListeningRef.current = true;
-      recognitionRef.current.start();
-      setVoiceState("listening");
+      try {
+        recognitionRef.current.start();
+        recognitionActiveRef.current = true;
+        setVoiceState("listening");
+      } catch {
+        // recognition was already starting (race with auto-restart) — ignore,
+        // it'll settle into the listening state via onstart/onend.
+      }
     }
   }
 
@@ -225,9 +242,13 @@ export default function Page() {
 
   async function send() {
     if (!input.trim() || loading) return;
-    if (voiceState === "listening") {
+    if (recognitionActiveRef.current) {
       wantListeningRef.current = false;
-      recognitionRef.current?.stop();
+      try {
+        recognitionRef.current?.stop();
+      } catch {
+        // already stopped
+      }
     }
     const text = input;
     setMessages((m) => [...m, { role: "candidate", text }]);
