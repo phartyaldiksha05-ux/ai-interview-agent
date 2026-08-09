@@ -25,16 +25,26 @@ function candidateSummary(candidate: Candidate): string {
 }
 
 function completedTopicsSummary(candidate: Candidate): string {
-  const ctx = buildCandidateCurriculumContext(candidate).filter((c) => c.status === "passed");
-  // Days the candidate struggled on (many attempts) even though they passed
-  // surface first — worth a deeper follow-up to confirm real understanding.
-  const sorted = [...ctx].sort((a, b) => (b.struggled ? 1 : 0) - (a.struggled ? 1 : 0));
+  const ctx = buildCandidateCurriculumContext(candidate).filter(
+    (c) => c.status === "passed"
+  );
+
+  const sorted = [...ctx].sort(
+    (a, b) => (b.struggled ? 1 : 0) - (a.struggled ? 1 : 0)
+  );
+
   if (sorted.length === 0) return "(none — see fallback rule below)";
+
   return sorted
     .map((c) => {
       const perf = c.struggled
-        ? `completed, but took ${c.attempts} attempts (worth confirming depth)`
-        : `completed cleanly (${c.attempts} attempt${c.attempts === 1 ? "" : "s"})`;
+        ? `mapped as a weaker area, worth confirming depth`
+        : `identified as a relevant technical area`;
+
+      if (isResumeDerived(candidate)) {
+        return `- "${c.title}" [${c.type}]: ${perf}\n  Skills/Objectives: ${c.objectives.join("; ")}`;
+      }
+
       return `- Day ${c.day} — "${c.title}" [${c.type}]: ${perf}\n  Objectives: ${c.objectives.join("; ")}`;
     })
     .join("\n");
