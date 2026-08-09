@@ -50,7 +50,7 @@ export async function getInterviewerDecision(
 
         // Enough for interview questions + feedback,
         // while avoiding unnecessarily large responses.
-        max_tokens: 1200,
+        max_tokens: 2048,
 
         response_format: {
           type: "json_object",

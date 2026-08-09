@@ -121,21 +121,37 @@ export async function POST(req: NextRequest) {
 
   let response: InterviewResponse;
 
-  if (decision.action === "end" && enoughCoverage && decision.feedback) {
-    session.done = true;
-    response = {
-      reply: decision.reply,
-      done: true,
-      feedback: decision.feedback,
-    };
-  } else if (decision.action === "end" && !enoughCoverage) {
-    // Guardrail: don't let the model end early even if it wants to —
-    // minimum coverage requirements aren't met yet. Nudge it to continue.
-    session.done = false;
-    response = { reply: decision.reply, done: false };
-  } else {
-    response = { reply: decision.reply, done: false };
-  }
+if (enoughCoverage) {
+  session.done = true;
+
+  response = {
+    reply:
+      decision.action === "end"
+        ? decision.reply
+        : "Interview completed.",
+    done: true,
+    feedback:
+      decision.feedback ?? {
+        summary:
+          "The interview covered the required technical areas and provided enough signal to assess the candidate.",
+        strengths: [],
+        gaps: [],
+        next: [],
+      },
+  };
+} else if (decision.action === "end") {
+  // Do not allow the LLM to end before minimum coverage is reached.
+  session.done = false;
+  response = {
+    reply: decision.reply,
+    done: false,
+  };
+} else {
+  response = {
+    reply: decision.reply,
+    done: false,
+  };
+}
 
   await saveSession(session);
 
