@@ -1,109 +1,97 @@
 import type { SessionState } from "./types";
-
-/**
- * Session persistence, in priority order:
- *
- * 1. Vercel KV — official Vercel storage, auto-configured via the Vercel
- *    dashboard (Storage tab → Create KV database). This is the RECOMMENDED
- *    backend for production: serverless functions on Vercel don't share
- *    memory between invocations, so an in-memory Map alone WILL lose
- *    session state mid-interview in production, even though it works fine
- *    in local dev (single long-running process).
- * 2. Breeth AI Memory Layer — used if BREETH_API_KEY is set and Vercel KV
- *    isn't configured.
- * 3. In-memory Map — local dev fallback only. Do not rely on this in
- *    production; it will intermittently lose sessions.
- */
+import { Redis } from "@upstash/redis";
 
 const memoryStore = new Map<string, SessionState>();
 
-const KV_CONFIGURED = Boolean(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+const redisConfigured = Boolean(
+  process.env.KV_REST_API_URL &&
+  process.env.KV_REST_API_TOKEN
+);
 
-const BREETH_BASE_URL = process.env.BREETH_BASE_URL || "https://api.thebreeth.com";
-const BREETH_API_KEY = process.env.BREETH_API_KEY;
-const BREETH_CONFIGURED = Boolean(BREETH_API_KEY) && !KV_CONFIGURED;
+const redis = redisConfigured ? Redis.fromEnv() : null;
 
 function sessionKey(sessionId: string): string {
   return `interview-session:${sessionId}`;
 }
 
-async function kvGet(sessionId: string): Promise<SessionState | null> {
+async function redisGet(
+  sessionId: string
+): Promise<SessionState | null> {
+  if (!redis) return null;
+
   try {
-    const { kv } = await import("@vercel/kv");
-    const value = await kv.get<SessionState>(sessionKey(sessionId));
+    const value = await redis.get<SessionState>(
+      sessionKey(sessionId)
+    );
+
     return value ?? null;
   } catch (err) {
-    console.error("Vercel KV get failed:", err);
+    console.error("Upstash Redis get failed:", err);
     return null;
   }
 }
 
-async function kvSet(sessionId: string, state: SessionState): Promise<void> {
-  try {
-    const { kv } = await import("@vercel/kv");
-    // Sessions are short-lived (a single interview) — expire after 2 hours
-    // so old sessions don't accumulate indefinitely.
-    await kv.set(sessionKey(sessionId), state, { ex: 60 * 60 * 2 });
-  } catch (err) {
-    console.error("Vercel KV set failed:", err);
-  }
-}
+async function redisSet(
+  sessionId: string,
+  state: SessionState
+): Promise<void> {
+  if (!redis) return;
 
-async function breethGet(sessionId: string): Promise<SessionState | null> {
   try {
-    const res = await fetch(
-      `${BREETH_BASE_URL}/v1/memory/${encodeURIComponent(sessionKey(sessionId))}`,
-      { headers: { Authorization: `Bearer ${BREETH_API_KEY}` }, cache: "no-store" }
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    return (data?.value as SessionState) ?? null;
-  } catch {
-    return null;
-  }
-}
-
-async function breethSet(sessionId: string, state: SessionState): Promise<void> {
-  try {
-    await fetch(
-      `${BREETH_BASE_URL}/v1/memory/${encodeURIComponent(sessionKey(sessionId))}`,
+    await redis.set(
+      sessionKey(sessionId),
+      state,
       {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${BREETH_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ value: state }),
+        ex: 60 * 60 * 2,
       }
     );
-  } catch {
-    // Non-fatal — in-memory copy still gets written by the caller.
+  } catch (err) {
+    console.error("Upstash Redis set failed:", err);
   }
 }
 
-export async function getSession(sessionId: string): Promise<SessionState | null> {
-  if (memoryStore.has(sessionId)) return memoryStore.get(sessionId)!;
+export async function getSession(
+  sessionId: string
+): Promise<SessionState | null> {
 
-  if (KV_CONFIGURED) {
-    const remote = await kvGet(sessionId);
-    if (remote) memoryStore.set(sessionId, remote);
-    return remote;
+  // 1. Fast local cache
+  const local = memoryStore.get(sessionId);
+
+  if (local) {
+    return local;
   }
-  if (BREETH_CONFIGURED) {
-    const remote = await breethGet(sessionId);
-    if (remote) memoryStore.set(sessionId, remote);
-    return remote;
+
+  // 2. Persistent Redis store
+  if (redisConfigured) {
+    const remote = await redisGet(sessionId);
+
+    if (remote) {
+      memoryStore.set(sessionId, remote);
+      return remote;
+    }
   }
+
+  // 3. Nothing found
   return null;
 }
 
-export async function saveSession(state: SessionState): Promise<void> {
-  state.updatedAt = new Date().toISOString();
-  memoryStore.set(state.sessionId, state);
+export async function saveSession(
+  state: SessionState
+): Promise<void> {
 
-  if (KV_CONFIGURED) {
-    await kvSet(state.sessionId, state);
-  } else if (BREETH_CONFIGURED) {
-    await breethSet(state.sessionId, state);
+  state.updatedAt = new Date().toISOString();
+
+  // Always keep local copy
+  memoryStore.set(
+    state.sessionId,
+    state
+  );
+
+  // Persist for Vercel/serverless
+  if (redisConfigured) {
+    await redisSet(
+      state.sessionId,
+      state
+    );
   }
 }
