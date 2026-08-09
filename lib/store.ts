@@ -1,15 +1,5 @@
 import type { SessionState } from "./types";
 
-/**
- * Session persistence.
- *
- * Serverless functions (Vercel) don't guarantee a warm, shared process
- * between requests, so a plain in-memory Map can lose state between calls.
- * We use the Breeth AI Memory Layer as the durable store when configured
- * (BREETH_API_KEY set), and transparently fall back to an in-memory Map
- * for local dev or if Breeth isn't configured — so the app always works,
- * even before you've wired up your Breeth starter-pack key.
- */
 
 const memoryStore = new Map<string, SessionState>();
 
